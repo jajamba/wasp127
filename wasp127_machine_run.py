@@ -3,13 +3,14 @@ import numpy as np
 import wasp127_machine
 import sys
 
-print sys.version
+print(sys.version)
 
-bin_starts = np.arange(1., 1.661, 0.06)
-bin_ends = np.arange(1.06, 1.73, 0.06)
+
+bin_starts = np.array([ 1.12,  1.18,  1.24,  1.3 ,  1.36,  1.42,  1.48,  1.54,  1.6 ])
+bin_ends = np.array([ 1.18,  1.24,  1.3 ,  1.36,  1.42,  1.48,  1.54,  1.6 ,  1.66])
 
 
 for i in range(1,len(bin_starts)):
     bin = [bin_starts[i], bin_ends[i]]
-    print bin
+    print(bin)
     wasp127_machine.main(wlrange=bin)

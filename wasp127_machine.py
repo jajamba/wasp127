@@ -20,12 +20,12 @@ orbit_option = 'transit' # 'transit', 'eclipse'
 do_mcmc = True
 syst_option = 'trap' # 'trap', 'poly4'
 nwalkers = 16
-nsteps = 50
-nburn = 0
+nsteps = 500
+nburn = 50
 nthreads = 12
 wlrange = [ 1.06, 1.75 ] # wavelength range in microns
 period = 4.17806
-pl_pars = [ 0.1, 0.001 ]
+pl_pars = [ 0.1 ]
 tpars = [ 30, 30, 1, 1, -0.001, 0.9999 ]
 p4_pars = [ 0, 0, 0, 0, 1, 0, 1 ]
 jd0 = 2458218.051694
@@ -33,7 +33,7 @@ apradius = 75
 exptime = 95.782104
 specfile = 'G141.apradius75.00pix.unsmoothed.maskrad75pix.bg2.spectra.rdiff.zapped.wasp127.pkl'
 imfile1 = 'ida504dwq_ima.fits'
-path = '/home/jspake/data/wasp127/fits'
+path = '/home/jspake/projects/in_progress/wasp127/data/fits'
 
 
 # main function
@@ -70,7 +70,7 @@ def main( orbit_option=orbit_option, do_mcmc=do_mcmc, syst_option=syst_option, \
 		# print results_t2.params
 		# print results_t2.perror
 		# add final results to dictionary
-		lc_dict_transit = add_results2dict( lc_dict, results_t2, wlrange, smalldata, do_mcmc, syst_option, orbit_option )
+		lc_dict_transit = add_results2dict( lc_dict, results_t2, wlrange, smalldata, do_mcmc, syst_option, orbit_option, jd0 )
 		# save pickle file
 		pickname = 'wasp127_mpfit_{0}_{1}_{2:.2f}-{3:.2f}micron_aprad{4}.pkl'.format( orbit_option, syst_option, wlrange[0], wlrange[1], apradius )
 		f = open( pickname, 'wb' )
@@ -83,14 +83,14 @@ def main( orbit_option=orbit_option, do_mcmc=do_mcmc, syst_option=syst_option, \
 		sampler = emcee.EnsembleSampler( nwalkers, ndim, log_likelihood_trap_trans, args=[ lc_dict, wlrange, smalldata ], threads=nthreads )
 		sampler.run_mcmc( pars0, nsteps )
 		samples = sampler.chain[:, nburn:, :].reshape((-1, ndim))
-		fig = corner.corner(samples, labels=[ "RpRs", "T0", "tpops", "tpopf", "dts", "dtf","slope", "c"], plot_contours=False)
+		fig = corner.corner(samples, labels=[ "RpRs", "tpops", "tpopf", "dts", "dtf","slope", "c"], plot_contours=False)
 		figname = 'wasp19_triangle_{0}_{1}_{2:.2f}-{3:.2f}micron_aprad{4}.eps'.format( orbit_option, syst_option, wlrange[0], wlrange[1], apradius )
 		fig.savefig(figname)
 		plt.close()
 		#find the 50th, 16th and 84th percentiles)
-		rprs_mcmc, t0_mcmc, tpops_mcmc, tpopf_mcmc, dts_mcmc, dtf_mcmc, linm_mcmc, linc_mcmc = [(v[1], v[2]-v[1], v[1]-v[0]) for v in zip(*np.percentile(samples,[16,50,84], axis=0))]
-		mcmc_results = np.array([ rprs_mcmc, t0_mcmc, tpops_mcmc, tpopf_mcmc, dts_mcmc, dtf_mcmc, linm_mcmc, linc_mcmc ])
-		lc_dict_transit = add_results2dict( lc_dict, mcmc_results, wlrange, smalldata, do_mcmc, syst_option, orbit_option )
+		rprs_mcmc, tpops_mcmc, tpopf_mcmc, dts_mcmc, dtf_mcmc, linm_mcmc, linc_mcmc = [(v[1], v[2]-v[1], v[1]-v[0]) for v in zip(*np.percentile(samples,[16,50,84], axis=0))]
+		mcmc_results = np.array([ rprs_mcmc, tpops_mcmc, tpopf_mcmc, dts_mcmc, dtf_mcmc, linm_mcmc, linc_mcmc ])
+		lc_dict_transit = add_results2dict( lc_dict, mcmc_results, wlrange, smalldata, do_mcmc, syst_option, orbit_option, jd0 )
 		pickname = 'wasp127_mcmcfit_{0}_{1}_{2:.2f}-{3:.2f}micron_aprad{4}.pkl'.format( orbit_option, syst_option, wlrange[0], wlrange[1], apradius )
 		f = open( pickname, 'wb' )
 		pickle.dump( lc_dict_transit, f )
@@ -206,9 +206,9 @@ def batman_params_w127(rp, wlrange):
 	enablePrint()
 	return params
 
-def transit_model( params, t0, jd ):
+def transit_model( params, jd ):
 	blockPrint()
-	params.t0 = t0
+	params.t0 = 0
 	p = batman.TransitModel(params,jd)
 	transit_flux = p.light_curve(params)
 	enablePrint()
@@ -236,7 +236,7 @@ def poly4_lin_model( pars, lc_dict, orbit_option ):
 
 
 
-def resids_mpfit_transit( pars, fjac=None, lc_dict=None, wlrange=None, smalldata=None, orbit_option=None, syst_option=None  ):
+def resids_mpfit_transit( pars, fjac=None, lc_dict=None, wlrange=None, smalldata=None, orbit_option=None, syst_option=None ):
 	model = model_eval_transit( lc_dict, pars, wlrange, smalldata, orbit_option, syst_option )
 	resids = ( lc_dict['lc'] - model ) / lc_dict['err']
 	resids = resids[lc_dict['out']]
@@ -280,9 +280,9 @@ def extractspec(fname,wlrange):
 
 
 def model_eval_transit( lc_dict, pars, wlrange, smalldata, orbit_option, syst_option ):
-	rp, t0 = pars[:2]
+	rp = pars[0]
 	bat_params = batman_params_w127( rp, wlrange )
-	transit_flux = transit_model( bat_params, t0, lc_dict['jd'] )
+	transit_flux = transit_model( bat_params, lc_dict['jd'] )
 	if syst_option == 'trap':
 		trap_mod = trap_lin_model( pars[-6:], smalldata, lc_dict['texp_sec'], lc_dict['jd'] )
 		model = trap_mod * transit_flux
@@ -292,14 +292,14 @@ def model_eval_transit( lc_dict, pars, wlrange, smalldata, orbit_option, syst_op
 	return model
 
 
-def cut_outliers_transit(lc_dict, pars, wlrange, smalldata):
+def cut_outliers_transit(lc_dict, pars, wlrange, smalldata ):
 	model = model_eval_transit( lc_dict, pars, wlrange, smalldata, orbit_option, syst_option )
 	noes = np.where( abs( lc_dict['lc'] - model ) > ( 4 * lc_dict['err'] ) )[0]
 	lc_dict['out'][noes] = False
 	return lc_dict
 
 # function to add final results to final dictionary
-def add_results2dict( lc_dict, results, wlrange, smalldata, do_mcmc, syst_option, orbit_option ):
+def add_results2dict( lc_dict, results, wlrange, smalldata, do_mcmc, syst_option, orbit_option, jd0 ):
 	# make copy of dictionary and add results
 	lc_dict_final = lc_dict.copy()
 	if orbit_option == 'transit':
@@ -313,10 +313,10 @@ def add_results2dict( lc_dict, results, wlrange, smalldata, do_mcmc, syst_option
 		final_params = results[:,0]
 	# also add best-fit transit and systematics model
 	bat_params = batman_params_w127( final_params[0], wlrange )
-	final_transit = transit_model( bat_params, final_params[1], jd )
+	final_transit = transit_model( bat_params, jd )
 	# add transit model with high cadence for plotting
 	fig_times = np.arange( jd[0], jd[-1], 0.0001 )
-	fig_transit = transit_model( bat_params, final_params[1], fig_times )
+	fig_transit = transit_model( bat_params, fig_times )
 	if syst_option == 'trap':
 		final_syst = trap_lin_model( final_params[-6:], smalldata, texp_sec, jd )
 	elif syst_option == 'poly4':
@@ -327,12 +327,13 @@ def add_results2dict( lc_dict, results, wlrange, smalldata, do_mcmc, syst_option
 	lc_dict_final['best_systematics'] = final_syst
 	lc_dict_final['fig_transit'] = fig_transit
 	lc_dict_final['fig_times'] = fig_times
+	lc_dict_final['jd0'] = jd0
 	return lc_dict_final
 
 # emcee functions down here
 def log_likelihood_trap_trans( pars, lc_dict, wlrange, smalldata ):
 	ndat = len(lc_dict['jd'])
-	rprs, t0, tpops, tpopf, dts, dtf, lin_m, lin_c = pars 
+	rprs, tpops, tpopf, dts, dtf, lin_m, lin_c = pars 
 	logp_prior = log_prior_trap_trans( pars )
 	if np.isfinite( logp_prior )==True:
 		model = model_eval_transit( lc_dict, pars, wlrange, smalldata, orbit_option, syst_option )
@@ -345,29 +346,24 @@ def log_likelihood_trap_trans( pars, lc_dict, wlrange, smalldata ):
 	return logp_data + logp_prior
 
 def initiate_walkers_trap_trans( nwalkers, parsguess ):
-	ndim = 8 # we have 8 free parameters
+	ndim = len(parsguess) # we have 8 free parameters
 	pars0 = np.zeros( [ nwalkers, ndim ] )
 	pars0[:,0] = parsguess[0] + (1e-07)*np.random.randn( nwalkers ) # rprs
-	pars0[:,1] = parsguess[1] + (1e-07)*np.random.randn( nwalkers ) # t0 should deff be -7
-	pars0[:,2] = parsguess[2] + (1e-01)*np.random.randn( nwalkers ) # tpops
-	pars0[:,3] = parsguess[3] + (1e-01)*np.random.randn( nwalkers ) # tpopf
-	pars0[:,4] = parsguess[4] + (1e-01)*np.random.randn( nwalkers ) # dts
-	pars0[:,5] = parsguess[5] + (1e-01)*np.random.randn( nwalkers ) # dtf
-	pars0[:,6] = parsguess[6] + (1e-07)*np.random.randn( nwalkers ) # lin_m
-	pars0[:,7] = parsguess[7] + (1e-07)*np.random.randn( nwalkers ) # lin_c
+	pars0[:,1] = parsguess[1] + (1e-01)*np.random.randn( nwalkers ) # tpops
+	pars0[:,2] = parsguess[2] + (1e-01)*np.random.randn( nwalkers ) # tpopf
+	pars0[:,3] = parsguess[3] + (1e-01)*np.random.randn( nwalkers ) # dts
+	pars0[:,4] = parsguess[4] + (1e-01)*np.random.randn( nwalkers ) # dtf
+	pars0[:,5] = parsguess[5] + (1e-07)*np.random.randn( nwalkers ) # lin_m
+	pars0[:,6] = parsguess[6] + (1e-07)*np.random.randn( nwalkers ) # lin_c
 	return pars0
 
 def log_prior_trap_trans( pars ):
-	rprs, t0, tpops, tpopf, dts, dtf, lin_m, lin_c = pars  
+	rprs, tpops, tpopf, dts, dtf, lin_m, lin_c = pars  
 	# Adopt simple uniform priors for all parameters
 	if ( rprs >= 0 )*( rprs <= 0.5):
 		logp_rprs = 0.
 	else:
 		logp_rprs = -np.inf
-	if ( t0 >= -0.1 )*( t0 <= 0.1):
-		logp_t0 = 0.
-	else:
-		logp_t0 = -np.inf
 	if ( tpops >= -200 )*( tpops <= 5000 ):
 		logp_tpops = 0.
 	else:
@@ -392,4 +388,4 @@ def log_prior_trap_trans( pars ):
 		logp_lin_c= 0.
 	else:
 		logp_lin_c = -np.inf
-	return logp_rprs+logp_t0+logp_tpops+logp_tpopf+logp_dts+logp_dtf+logp_lin_m+logp_lin_c
+	return logp_rprs+logp_tpops+logp_tpopf+logp_dts+logp_dtf+logp_lin_m+logp_lin_c
